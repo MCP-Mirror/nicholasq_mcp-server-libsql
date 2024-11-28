@@ -10,6 +10,11 @@ A Model Context Protocol server that exposes LibSQL/Turso database schema inform
 
 ## Usage
 
+Install [deno](https://docs.deno.com/runtime) (macos/linux):
+```bash
+curl -fsSL https://deno.land/install.sh | sh
+```
+
 Build the binary:
 ```bash
 deno compile --allow-run main.ts
