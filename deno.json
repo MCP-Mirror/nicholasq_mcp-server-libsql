@@ -8,6 +8,8 @@
     "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.0.1",
     "@std/assert": "jsr:@std/assert@1",
     "@std/cli": "jsr:@std/cli@^1.0.7",
+    "@std/csv": "jsr:@std/csv@^1.0.4",
+    "@std/log": "jsr:@std/log@^0.224.11",
     "pg": "npm:pg@^8.13.1",
     "zod": "npm:zod@^3.23.8"
   }

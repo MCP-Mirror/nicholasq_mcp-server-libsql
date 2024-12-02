@@ -12,8 +12,10 @@ import {
 import { parseArgs } from "@std/cli";
 import { z } from "zod";
 import { createClient, Row } from "@libsql/client";
-import { logger, resultSetToCsv } from "./utils.ts";
+import { stringify as toCsv } from "@std/csv";
+import * as log from "@std/log";
 
+const VERSION = "0.0.3";
 const SCHEMA_PROMPT_NAME = "libsql-schema";
 const QUERY_PROMPT_NAME = "libsql-query";
 const ALL_TABLES = "all-tables";
@@ -40,15 +42,33 @@ argsSchema.parse(args);
 
 const dbUrl = args._[0] as string;
 const authToken = args["auth-token"];
-const logFile = args["log-file"];
+const logFile = args["log-file"] ?? "./mcp-server-libsql.log";
 const debug = args["debug"];
-const log = logger(logFile, debug);
 const db = createClient({ url: dbUrl, authToken });
+const logLevel = debug ? "DEBUG" : "WARN";
+
+log.setup({
+  handlers: {
+    file: new log.FileHandler(logLevel, {
+      filename: logFile,
+      bufferSize: 0,
+      formatter: log.formatters.jsonFormatter,
+    }),
+  },
+  loggers: {
+    default: {
+      level: logLevel,
+      handlers: ["file"],
+    },
+  },
+});
+
+const logger = log.getLogger();
 
 const server = new Server(
   {
     name: "context-server/libsql",
-    version: "0.0.2",
+    version: VERSION,
   },
   {
     capabilities: {
@@ -60,7 +80,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-  await log.debug("ListResourcesRequestSchema", `${JSON.stringify(request)}`);
+  logger.debug("ListResourcesRequestSchema", request);
 
   const rs = await db.execute(FETCH_ALL_TABLES_QUERY);
   const rows = rs.rows as SqliteMaster[];
@@ -75,7 +95,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
 });
 
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  await log.debug("ReadResourceRequestSchema", `${JSON.stringify(request)}`);
+  logger.debug("ReadResourceRequestSchema", request);
   const resourceUrl = new URL(request.params.uri);
   const pathComponents = resourceUrl.pathname.split("/");
   const schema = pathComponents.pop();
@@ -112,7 +132,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 });
 
 server.setRequestHandler(CompleteRequestSchema, async (request) => {
-  await log.debug("CompleteRequestSchema", `${JSON.stringify(request)}`);
+  logger.debug("CompleteRequestSchema", request);
   if (
     request.params.ref.name === SCHEMA_PROMPT_NAME ||
     request.params.ref.name === QUERY_PROMPT_NAME
@@ -138,8 +158,8 @@ server.setRequestHandler(CompleteRequestSchema, async (request) => {
   throw new Error("unknown prompt");
 });
 
-server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
-  await log.debug("ListPromptsRequestSchema", `${JSON.stringify(request)}`);
+server.setRequestHandler(ListPromptsRequestSchema, (request) => {
+  logger.debug("ListPromptsRequestSchema", request);
   return {
     prompts: [
       {
@@ -166,7 +186,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
 });
 
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-  await log.debug("GetPromptRequestSchema", `${JSON.stringify(request)}`);
+  logger.debug("GetPromptRequestSchema", request);
   if (request.params.name === SCHEMA_PROMPT_NAME) {
     const tableName = request.params.arguments?.tableName;
 
@@ -224,7 +244,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       };
     }
 
-    const csv = resultSetToCsv(rs);
+    const csv = toCsv(rs.rows, { columns: rs.columns });
 
     return {
       messages: [{
@@ -240,8 +260,8 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   throw new Error(`Prompt '${request.params.name}' not implemented`);
 });
 
-server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-  await log.debug("ListToolsRequestSchema", `${JSON.stringify(request)}`);
+server.setRequestHandler(ListToolsRequestSchema, (request) => {
+  logger.debug("ListToolsRequestSchema", request);
   return {
     tools: [
       {
@@ -259,7 +279,7 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  await log.debug("CallToolRequestSchema", `${JSON.stringify(request)}`);
+  logger.debug("CallToolRequestSchema", request);
   if (request.params.name === "query") {
     const sql = request.params.arguments?.sql as string;
     const res = await db.execute(sql);

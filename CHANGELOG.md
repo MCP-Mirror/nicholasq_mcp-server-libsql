@@ -4,7 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.2] - 2024-03-XX
+## [0.0.3] - 2024-12-01
+
+### Added
+- Dependencies for @std/csv and @std/log.
+
+### Changed
+- Refactored logging to use @std/log.
+- Removed utils.ts and migrated CSV export functionality to use @std/csv.
+
+[0.0.3]: https://github.com/nicholasq/mcp-server-libsql/compare/v0.0.2...v0.0.3
+
+## [0.0.2] - 2024-12-01
 
 ### Added
 - Support for @libsql/client v0.14.0
