@@ -14,8 +14,10 @@ import { z } from "zod";
 import { createClient, Row } from "@libsql/client";
 import { stringify as toCsv } from "@std/csv";
 import * as log from "@std/log";
+import { join } from "@std/path";
+import { ensureDir } from "@std/fs";
 
-const VERSION = "0.0.3";
+const VERSION = "0.4.0";
 const SCHEMA_PROMPT_NAME = "libsql-schema";
 const QUERY_PROMPT_NAME = "libsql-query";
 const ALL_TABLES = "all-tables";
@@ -42,15 +44,35 @@ argsSchema.parse(args);
 
 const dbUrl = args._[0] as string;
 const authToken = args["auth-token"];
-const logFile = args["log-file"] ?? "./mcp-server-libsql.log";
 const debug = args["debug"];
 const db = createClient({ url: dbUrl, authToken });
 const logLevel = debug ? "DEBUG" : "WARN";
 
+async function getLogFilePath() {
+  const os = Deno.build.os;
+  const homeDir = Deno.env.get("HOME") || Deno.env.get("USERPROFILE");
+
+  if (!homeDir) {
+    throw new Error("HOME or USERPROFILE environment variable not set");
+  }
+
+  let logDir = join(homeDir, ".local", "share", "mcp-server-libsql");
+
+  if (os === "windows") {
+    logDir = join(homeDir, "AppData", "Local", "mcp-server-libsql");
+  } else if (os !== "darwin" && os !== "linux") {
+    throw new Error(`Unsupported OS: ${os}`);
+  }
+
+  await ensureDir(logDir);
+
+  return join(logDir, "mcp-server-libsql.log");
+}
+
 log.setup({
   handlers: {
     file: new log.FileHandler(logLevel, {
-      filename: logFile,
+      filename: await getLogFilePath(),
       bufferSize: 0,
       formatter: log.formatters.jsonFormatter,
     }),

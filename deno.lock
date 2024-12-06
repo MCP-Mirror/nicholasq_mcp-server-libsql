@@ -2,6 +2,7 @@
   "version": "4",
   "specifiers": {
     "jsr:@std/assert@1": "1.0.8",
+    "jsr:@std/bytes@^1.0.3": "1.0.4",
     "jsr:@std/cli@^1.0.7": "1.0.7",
     "jsr:@std/csv@^1.0.4": "1.0.4",
     "jsr:@std/fmt@^1.0.3": "1.0.3",
@@ -9,6 +10,7 @@
     "jsr:@std/internal@^1.0.5": "1.0.5",
     "jsr:@std/io@0.225": "0.225.0",
     "jsr:@std/log@~0.224.11": "0.224.11",
+    "jsr:@std/path@^1.0.8": "1.0.8",
     "jsr:@std/streams@^1.0.8": "1.0.8",
     "npm:@libsql/client@0.14": "0.14.0",
     "npm:@modelcontextprotocol/sdk@^1.0.1": "1.0.1",
@@ -21,6 +23,9 @@
       "dependencies": [
         "jsr:@std/internal"
       ]
+    },
+    "@std/bytes@1.0.4": {
+      "integrity": "11a0debe522707c95c7b7ef89b478c13fb1583a7cfb9a85674cd2cc2e3a28abc"
     },
     "@std/cli@1.0.7": {
       "integrity": "98359df9df586a69015ba570305183b0cb9e7d53c05ea2016ef9a3e77e82c7cd"
@@ -35,7 +40,10 @@
       "integrity": "97765c16aa32245ff4e2204ecf7d8562496a3cb8592340a80e7e554e0bb9149f"
     },
     "@std/fs@1.0.6": {
-      "integrity": "42b56e1e41b75583a21d5a37f6a6a27de9f510bcd36c0c85791d685ca0b85fa2"
+      "integrity": "42b56e1e41b75583a21d5a37f6a6a27de9f510bcd36c0c85791d685ca0b85fa2",
+      "dependencies": [
+        "jsr:@std/path"
+      ]
     },
     "@std/internal@1.0.5": {
       "integrity": "54a546004f769c1ac9e025abd15a76b6671ddc9687e2313b67376125650dc7ba"
@@ -51,8 +59,14 @@
         "jsr:@std/io"
       ]
     },
+    "@std/path@1.0.8": {
+      "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
+    },
     "@std/streams@1.0.8": {
-      "integrity": "b41332d93d2cf6a82fe4ac2153b930adf1a859392931e2a19d9fabfb6f154fb3"
+      "integrity": "b41332d93d2cf6a82fe4ac2153b930adf1a859392931e2a19d9fabfb6f154fb3",
+      "dependencies": [
+        "jsr:@std/bytes"
+      ]
     }
   },
   "npm": {
@@ -321,7 +335,9 @@
       "jsr:@std/assert@1",
       "jsr:@std/cli@^1.0.7",
       "jsr:@std/csv@^1.0.4",
+      "jsr:@std/fs@^1.0.6",
       "jsr:@std/log@~0.224.11",
+      "jsr:@std/path@^1.0.8",
       "npm:@libsql/client@0.14",
       "npm:@modelcontextprotocol/sdk@^1.0.1",
       "npm:pg@^8.13.1",
