@@ -37,3 +37,7 @@ Run the server:
 # With Auth
 ./mcp-server-libsql --auth-token <token> <database-url>
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
