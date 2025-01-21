@@ -11,7 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { parseArgs } from "@std/cli";
 import { z } from "zod";
-import { createClient, Row } from "@libsql/client";
+import { createClient, InStatement, ResultSet, Row } from "@libsql/client";
 import { stringify as toCsv } from "@std/csv";
 import * as log from "@std/log";
 import { join } from "@std/path";
@@ -21,8 +21,7 @@ const VERSION = "0.4.0";
 const SCHEMA_PROMPT_NAME = "libsql-schema";
 const QUERY_PROMPT_NAME = "libsql-query";
 const ALL_TABLES = "all-tables";
-const FETCH_ALL_TABLES_QUERY =
-  "SELECT * FROM sqlite_master WHERE type = 'table'";
+const FETCH_ALL_TABLES_SQL = "SELECT * FROM sqlite_master WHERE type = 'table'";
 
 interface SqliteMaster extends Row {
   type: string;
@@ -45,29 +44,7 @@ argsSchema.parse(args);
 const dbUrl = args._[0] as string;
 const authToken = args["auth-token"];
 const debug = args["debug"];
-const db = createClient({ url: dbUrl, authToken });
 const logLevel = debug ? "DEBUG" : "WARN";
-
-async function getLogFilePath() {
-  const os = Deno.build.os;
-  const homeDir = Deno.env.get("HOME") || Deno.env.get("USERPROFILE");
-
-  if (!homeDir) {
-    throw new Error("HOME or USERPROFILE environment variable not set");
-  }
-
-  let logDir = join(homeDir, ".local", "share", "mcp-server-libsql");
-
-  if (os === "windows") {
-    logDir = join(homeDir, "AppData", "Local", "mcp-server-libsql");
-  } else if (os !== "darwin" && os !== "linux") {
-    throw new Error(`Unsupported OS: ${os}`);
-  }
-
-  await ensureDir(logDir);
-
-  return join(logDir, "mcp-server-libsql.log");
-}
 
 log.setup({
   handlers: {
@@ -101,10 +78,65 @@ const server = new Server(
   },
 );
 
+async function getLogFilePath() {
+  const os = Deno.build.os;
+  const homeDir = Deno.env.get("HOME") || Deno.env.get("USERPROFILE");
+
+  if (!homeDir) {
+    throw new Error("HOME or USERPROFILE environment variable not set");
+  }
+
+  let logDir = join(homeDir, ".local", "share", "mcp-server-libsql");
+
+  if (os === "windows") {
+    logDir = join(homeDir, "AppData", "Local", "mcp-server-libsql");
+  } else if (os !== "darwin" && os !== "linux") {
+    throw new Error(`Unsupported OS: ${os}`);
+  }
+
+  await ensureDir(logDir);
+
+  return join(logDir, "mcp-server-libsql.log");
+}
+
+function executeSql(inStmt: InStatement): Promise<ResultSet> {
+  logger.debug("executeSql", inStmt);
+  const db = createClient({ url: dbUrl, authToken });
+  return db.execute(inStmt);
+}
+
+async function fetchAllFromTable(
+  tableName: string,
+  page: number = 1,
+  limit: number = 25,
+  outputFormat: "json" | "csv" = "csv",
+): Promise<string> {
+  const tablesResultSet = await executeSql(FETCH_ALL_TABLES_SQL);
+  const sqliteMasterRows = tablesResultSet.rows as SqliteMaster[];
+  const validTableNames = sqliteMasterRows.map((row) => row.tbl_name);
+
+  if (!validTableNames.includes(tableName)) {
+    throw new Error(`Invalid table name: ${tableName}`);
+  }
+
+  const queryResultSet = await executeSql({
+    sql: `SELECT * FROM ${tableName} LIMIT ? OFFSET ?`,
+    args: [limit, (page - 1) * limit],
+  });
+
+  if (queryResultSet.rows.length === 0) {
+    return `No rows found in table ${tableName}`;
+  }
+
+  return outputFormat === "csv"
+    ? toCsv(queryResultSet.rows, { columns: queryResultSet.columns })
+    : JSON.stringify(queryResultSet.rows);
+}
+
 server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
   logger.debug("ListResourcesRequestSchema", request);
 
-  const rs = await db.execute(FETCH_ALL_TABLES_QUERY);
+  const rs = await executeSql(FETCH_ALL_TABLES_SQL);
   const rows = rs.rows as SqliteMaster[];
   const tables = rows.map((row) => row.tbl_name);
 
@@ -131,7 +163,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     throw new Error("No table name provided");
   }
 
-  const rs = await db.execute({
+  const rs = await executeSql({
     sql: "SELECT * FROM sqlite_master WHERE type = 'table' AND tbl_name = ?",
     args: [tableName],
   });
@@ -166,7 +198,7 @@ server.setRequestHandler(CompleteRequestSchema, async (request) => {
       return { completion: { values: [] } };
     }
 
-    const rs = await db.execute(FETCH_ALL_TABLES_QUERY);
+    const rs = await executeSql(FETCH_ALL_TABLES_SQL);
     const rows = rs.rows as SqliteMaster[];
     const tables = rows.map((row) => row.tbl_name);
 
@@ -218,11 +250,11 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 
     let schema: string;
     if (tableName === ALL_TABLES) {
-      const rs = await db.execute(FETCH_ALL_TABLES_QUERY);
+      const rs = await executeSql(FETCH_ALL_TABLES_SQL);
       const rows = rs.rows as SqliteMaster[];
       schema = rows.map((row) => row.sql).join("\n\n");
     } else {
-      const rs = await db.execute({
+      const rs = await executeSql({
         sql: "SELECT * FROM sqlite_master WHERE type='table' AND tbl_name = ?",
         args: [tableName],
       });
@@ -251,32 +283,42 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       throw new Error(`Invalid tableName: ${tableName}`);
     }
 
-    const rs = await db.execute(`SELECT * FROM ${tableName} LIMIT 500`);
-    const rows = rs.rows;
+    if (tableName === ALL_TABLES) {
+      const rs = await executeSql(FETCH_ALL_TABLES_SQL);
+      const rows = rs.rows as SqliteMaster[];
+      const tables = rows.map((row) => row.tbl_name);
 
-    if (rows.length === 0) {
+      const allTablesData = tables.filter((table) => table?.trim()).map(
+        (tableName) => {
+          return fetchAllFromTable(tableName);
+        },
+      );
+
+      const result = await Promise.all(allTablesData);
+      const data = result.join("\n\n");
+
       return {
         messages: [{
           role: "user",
           content: {
             type: "text",
-            text: `No rows found in table ${tableName}`,
+            text: data,
+          },
+        }],
+      };
+    } else {
+      const data = await fetchAllFromTable(tableName);
+
+      return {
+        messages: [{
+          role: "user",
+          content: {
+            type: "text",
+            text: data,
           },
         }],
       };
     }
-
-    const csv = toCsv(rs.rows, { columns: rs.columns });
-
-    return {
-      messages: [{
-        role: "user",
-        content: {
-          type: "text",
-          text: csv,
-        },
-      }],
-    };
   }
 
   throw new Error(`Prompt '${request.params.name}' not implemented`);
@@ -304,7 +346,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   logger.debug("CallToolRequestSchema", request);
   if (request.params.name === "query") {
     const sql = request.params.arguments?.sql as string;
-    const res = await db.execute(sql);
+    const res = await executeSql(sql);
     return { content: [{ type: "string", text: JSON.stringify(res.rows) }] };
   }
   throw new Error("Tool not found");
